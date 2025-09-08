@@ -5,7 +5,6 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <time.h>
-#include <pthread.h>
 #include <errno.h>
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -67,36 +66,29 @@ int resolve_hostname(const char *hostname, uint32_t *out_ip) {
 	return 0;
 }
 
-// Refresh DNS cache for a given list
-void refresh_dns_cache(dns_cache_t *cache) {
-	for (size_t i = 0; i < cache->count; ++i) {
-		if (cache->entries[i].is_hostname) {
-			if (resolve_hostname(cache->entries[i].entry, &cache->entries[i].ip) != 0) {
-				cache->entries[i].ip = 0; // Mark as unresolved
-			}
-		} else {
-			// Parse as IPv4 string
-			uint8_t address[4];
-			int err = sscanf(cache->entries[i].entry, "%hhu.%hhu.%hhu.%hhu",
-				&address[0], &address[1], &address[2], &address[3]);
-			if (err == 4) {
-				cache->entries[i].ip = *((uint32_t*)&address);
+// Refresh DNS cache for a given list (check if refresh is needed)
+void refresh_dns_cache_if_needed(dns_cache_t *cache) {
+	time_t now = time(NULL);
+	if (cache->last_refresh == 0 || (now - cache->last_refresh) >= DEFAULT_DNS_CACHE_REFRESH_INTERVAL) {
+		for (size_t i = 0; i < cache->count; ++i) {
+			if (cache->entries[i].is_hostname) {
+				if (resolve_hostname(cache->entries[i].entry, &cache->entries[i].ip) != 0) {
+					cache->entries[i].ip = 0; // Mark as unresolved
+				}
 			} else {
-				cache->entries[i].ip = 0;
+				// Parse as IPv4 string
+				uint8_t address[4];
+				int err = sscanf(cache->entries[i].entry, "%hhu.%hhu.%hhu.%hhu",
+					&address[0], &address[1], &address[2], &address[3]);
+				if (err == 4) {
+					cache->entries[i].ip = *((uint32_t*)&address);
+				} else {
+					cache->entries[i].ip = 0;
+				}
 			}
 		}
+		cache->last_refresh = now;
 	}
-	cache->last_refresh = time(NULL);
-}
-
-// Thread to periodically refresh DNS caches
-void *dns_cache_refresh_thread(void *arg) {
-	while (m.alive) {
-		refresh_dns_cache(&m.exclude_dns_cache);
-		refresh_dns_cache(&m.include_dns_cache);
-		sleep(m.dns_cache_refresh_interval > 0 ? m.dns_cache_refresh_interval : DEFAULT_DNS_CACHE_REFRESH_INTERVAL);
-	}
-	return NULL;
 }
 
 #ifndef CONFIG_PREFIX
@@ -275,6 +267,10 @@ int parse_arp(unsigned char *data) {
 		memcpy(&ta_ip, arp_IPv4->ns_arp_target_proto_addr, sizeof(unsigned int));
 
 		if((eth_ip&m.subnet) == (src_ip&m.subnet)) {
+			// Refresh DNS caches if needed before checking
+			refresh_dns_cache_if_needed(&m.exclude_dns_cache);
+			refresh_dns_cache_if_needed(&m.include_dns_cache);
+			
 			// Check blocklist (source_exclude) first
 			bool blocked = false;
 			for (size_t i = 0; i < m.exclude_dns_cache.count; ++i) {
@@ -553,27 +549,28 @@ int load_config() {
 }
 
 int main(int argc, char *argv[]) {
+	// Initialize all fields to zero/NULL for safety
+	memset(&m, 0, sizeof(m));
+	
 	m.allow_gateway_s = NULL; // init config in case it won't be set
 	m.dns_cache_refresh_interval = DEFAULT_DNS_CACHE_REFRESH_INTERVAL;
 	m.exclude_dns_cache.count = 0;
 	m.include_dns_cache.count = 0;
 	m.exclude_dns_cache.last_refresh = 0;
 	m.include_dns_cache.last_refresh = 0;
+	
 	// priority: load_config < read_args
 	load_config();
 	RETONFAIL(read_args(argc, argv));
 	RETONFAIL(parse_args());
-	// Start DNS cache refresh thread
-	pthread_t dns_thread;
-	m.alive = true;
-	pthread_create(&dns_thread, NULL, dns_cache_refresh_thread, NULL);
+	
 	// Initial DNS cache population
-	refresh_dns_cache(&m.exclude_dns_cache);
-	refresh_dns_cache(&m.include_dns_cache);
+	refresh_dns_cache_if_needed(&m.exclude_dns_cache);
+	refresh_dns_cache_if_needed(&m.include_dns_cache);
+	
 	RETONFAIL(initialize());
 	RETONFAIL(watch_packets());
-	m.alive = false;
-	pthread_join(dns_thread, NULL);
+	
 	cleanup();
 	return 0;
 }
