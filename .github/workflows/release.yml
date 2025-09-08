@@ -56,7 +56,7 @@ jobs:
           path: wake-on-arp-linux-arm64
 
   release:
-    needs: [build-x64, build-arm64]
+    needs: [build-x64, build-arm64, build-armv7]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
