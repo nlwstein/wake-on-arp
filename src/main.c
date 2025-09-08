@@ -497,14 +497,6 @@ int get_local_ip() {
 						&m.eth_ip[1], &m.eth_ip[2], &m.eth_ip[3]);
 	return 0;
 }
-
-	m.allow_host_refresh = 300;
-	m.allow_host_last_refresh = 0;
-		} else if(!strcmp("allow_host_refresh", name)) {
-			m.allow_host_refresh = atoi(val);
-			free(val);
-		} else if(!strcmp("allow_host", name)) {
-			arr_add(m.allow_hostnames, val);
 int load_config() {
 	arr_init(m.allow_hostnames);
 	arr_init(m.allow_host_ips);
