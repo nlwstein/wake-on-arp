@@ -68,6 +68,10 @@ int get_local_ip();
 int send_magic_packet(unsigned char*);
 
 struct main {
+	char **allow_hostnames;
+	uint32_t *allow_host_ips;
+	int allow_host_refresh;
+	time_t allow_host_last_refresh;
 	bool debug;
 	char *eth_dev_s;
 	char *eth_ip_s;
@@ -495,6 +499,47 @@ int get_local_ip() {
 }
 
 int load_config() {
+	arr_init(m.allow_hostnames);
+	arr_init(m.allow_host_ips);
+	m.allow_host_refresh = 300;
+	m.allow_host_last_refresh = 0;
+		} else if(!strcmp("allow_host_refresh", name)) {
+			m.allow_host_refresh = atoi(val);
+			free(val);
+		} else if(!strcmp("allow_host", name)) {
+			arr_add(m.allow_hostnames, val);
+void refresh_allow_host_ips() {
+	// Clear previous IPs
+	arr_resize(m.allow_host_ips, 0);
+	for(size_t i = 0; i < arr_count(m.allow_hostnames); i++) {
+		struct hostent *he = gethostbyname(m.allow_hostnames[i]);
+		if(he && he->h_addrtype == AF_INET) {
+			for(char **addr = he->h_addr_list; *addr != NULL; addr++) {
+				uint32_t ip;
+				memcpy(&ip, *addr, sizeof(uint32_t));
+				arr_add(m.allow_host_ips, ip);
+			}
+		}
+	}
+	m.allow_host_last_refresh = time(NULL);
+}
+	// Periodically refresh allowed host IPs
+	if(arr_count(m.allow_hostnames) > 0 && (time(NULL) - m.allow_host_last_refresh > m.allow_host_refresh)) {
+		refresh_allow_host_ips();
+	}
+	// Hostname allowlist check
+	if(arr_count(m.allow_host_ips) > 0) {
+		int host_found = -1;
+		arr_find(m.allow_host_ips, src_ip, &host_found);
+		if(host_found == -1) {
+			if(m.debug) {
+				printf("[DEBUG] Source IP not in resolved allow_host list: ");
+				print_ip(src_ip);
+				puts("");
+			}
+			return 0;
+		}
+	}
 					if(m.debug) {
 	FILE *fp = fopen(CONFIG_PREFIX"/wake-on-arp.conf", "r");
 	if(!fp) {

@@ -60,7 +60,72 @@ Use-case 2: You are too lazy to wake up your NAS at home using a 3rd party progr
 
 # How to run
 
+
 ``./wake-on-arp -h`` to see what arguments you have to fill in
+
+## New Features (2025)
+
+### Source IP Allowlist, Denylist, and Global Allow
+
+You can now control which source IPs are allowed to trigger a wake:
+
+- `--allow-any-source` — allow ARP requests from any source IP (default: false)
+- `--allow-source <ip>` — allow ARP requests only from this source IP (can be specified multiple times)
+- `--deny-source <ip>` — deny ARP requests from this source IP (can be specified multiple times)
+
+These can also be set in the config file:
+
+```
+allow_any_source true
+source_allow 192.168.1.100
+source_deny 192.168.1.5
+```
+
+### Hostname-based Allowlist (Dynamic)
+
+You can specify hostnames to be periodically resolved and used as an allowlist for ARP requests:
+
+- `allow_host <hostname>` — allow ARP requests from this hostname (can be specified multiple times)
+- `allow_host_refresh <seconds>` — how often to refresh the resolved IPs (default: 300)
+
+Example config:
+```
+allow_host steezybook
+allow_host razzbase
+allow_host_refresh 300
+```
+
+This is useful for DHCP environments or when you want to allow devices by name instead of static IP.
+
+### Debug Logging
+
+Add `--debug` to your command line to enable detailed debug output about ARP requests and filtering decisions.
+
+### Multiple Targets
+
+You can specify multiple target IP/MAC pairs using repeated `-i` and `-m` options or in the config file as `target_ip_1`, `target_mac_1`, `target_ip_2`, etc.
+
+### Example Config File
+
+```
+allow_host mylaptop
+allow_host mydesktop
+allow_host_refresh 300
+broadcast_ip  192.168.1.255
+target_ip_1   192.168.1.100
+target_mac_1  AA:BB:CC:DD:EE:FF
+net_device    eth0
+subnet        24
+allow_gateway false
+source_exclude 192.168.1.5
+allow_any_source true
+```
+
+### Example Command Line
+
+```
+sudo ./wake-on-arp -d eth0 -b 192.168.1.255 -s 24 -i 192.168.1.100 -m AA:BB:CC:DD:EE:FF --allow-any-source --debug
+```
 
 ## I don't want to fill in commandline arguments in my init script/daemon!
 
