@@ -498,9 +498,6 @@ int get_local_ip() {
 	return 0;
 }
 
-int load_config() {
-	arr_init(m.allow_hostnames);
-	arr_init(m.allow_host_ips);
 	m.allow_host_refresh = 300;
 	m.allow_host_last_refresh = 0;
 		} else if(!strcmp("allow_host_refresh", name)) {
@@ -508,6 +505,116 @@ int load_config() {
 			free(val);
 		} else if(!strcmp("allow_host", name)) {
 			arr_add(m.allow_hostnames, val);
+int load_config() {
+	arr_init(m.allow_hostnames);
+	arr_init(m.allow_host_ips);
+	m.allow_host_refresh = 300;
+	m.allow_host_last_refresh = 0;
+
+	FILE *fp = fopen(CONFIG_PREFIX"/wake-on-arp.conf", "r");
+	if(!fp) {
+		fprintf(stderr, "Could not open config file: "CONFIG_PREFIX"/wake-on-arp.conf\n");
+		// Still initialize arrays to avoid segfaults
+		arr_init(m.source_blacklist);
+		arr_init(m.target_list);
+		arr_init(m.source_allowlist);
+		arr_init(m.source_denylist);
+		m.allow_any_source = false;
+		return 0; // Not an error, just skip config loading
+	}
+
+	// init variables
+	arr_init(m.source_blacklist);
+	arr_init(m.target_list);
+	arr_init(m.source_allowlist);
+	arr_init(m.source_denylist);
+	m.allow_any_source = false;
+
+	char *line = NULL;
+	size_t len;
+	while(getline(&line, &len, fp) != -1) {
+		char *name, *val;
+		int error = sscanf(line, "%ms %ms", &name, &val);
+		if(error != 2) {
+			if(name) free(name);
+			if(val) free(val);
+			continue;
+		}
+
+		if(!strcmp("broadcast_ip", name)) {
+			m.broadcast_ip_s = val;
+		} else if(!strcmp("net_device", name)) {
+			m.eth_dev_s = val;
+		} else if(!strcmp("subnet", name)) {
+			m.subnet_s = val;
+		} else if(!strcmp("allow_gateway", name)) {
+			m.allow_gateway_s = val;
+		} else if(!strncmp("target_mac", name, 10)) {
+			unsigned int number = 0;
+			if(!sscanf(name, "target_mac_%u", &number)) {
+				fprintf(stderr, "Invalid option '%s', should be like 'target_mac_1' (fxp)", name);
+				return 2;
+			}
+			target_mac_add(m.target_list, number, val);
+		} else if(!strncmp("target_ip", name, 9)) {
+			unsigned int number = 0;
+			if(!sscanf(name, "target_ip_%u", &number)) {
+				fprintf(stderr, "Invalid option '%s', should be like 'target_ip_1' (fxp)", name);
+				return 2;
+			}
+			target_ip_add(m.target_list, number, val);
+		} else if(!strcmp("allow_any_source", name)) {
+			m.allow_any_source = (strcmp(val, "true") == 0 || strcmp(val, "1") == 0);
+			free(val);
+		} else if(!strcmp("source_allow", name)) {
+			uint8_t address[4];
+			int err = sscanf(val, "%hhu.%hhu.%hhu.%hhu",
+				&address[0], &address[1], &address[2], &address[3]);
+			if(err != 4) {
+				fprintf(stderr, "Invalid IP address specified for allowlist \"%s\"\n", val);
+				return 2;
+			}
+			uint32_t address_ptr = *((uint32_t*)&address);
+			arr_add(m.source_allowlist, address_ptr);
+			free(val);
+		} else if(!strcmp("source_deny", name)) {
+			uint8_t address[4];
+			int err = sscanf(val, "%hhu.%hhu.%hhu.%hhu",
+				&address[0], &address[1], &address[2], &address[3]);
+			if(err != 4) {
+				fprintf(stderr, "Invalid IP address specified for denylist \"%s\"\n", val);
+				return 2;
+			}
+			uint32_t address_ptr = *((uint32_t*)&address);
+			arr_add(m.source_denylist, address_ptr);
+			free(val);
+		} else if(!strcmp("source_exclude", name)) {
+			uint8_t address[4];
+			int err = sscanf(val, "%hhu.%hhu.%hhu.%hhu",
+				&address[0], &address[1], &address[2], &address[3]);
+			if(err != 4) {
+				fprintf(stderr, "Invalid IP address specified \"%s\", should be in the following format: \"ab.cd.ef.gh\"\n", val);
+				return 2;
+			}
+			uint32_t address_ptr = *((uint32_t*)&address);
+			arr_add(m.source_blacklist, address_ptr);
+			free(val);
+		} else if(!strcmp("allow_host_refresh", name)) {
+			m.allow_host_refresh = atoi(val);
+			free(val);
+		} else if(!strcmp("allow_host", name)) {
+			arr_add(m.allow_hostnames, val);
+		} else free(val); // not used
+
+		free(name);
+	}
+	if(line) free(line);
+	// weird seg. fault on ARMv7 (have to investigate)
+	//fclose(fp);
+	return 0;
+}
+
+// Refresh the resolved IPs for allow_hostnames
 void refresh_allow_host_ips() {
 	// Clear previous IPs
 	arr_resize(m.allow_host_ips, 0);
@@ -523,41 +630,6 @@ void refresh_allow_host_ips() {
 	}
 	m.allow_host_last_refresh = time(NULL);
 }
-	// Periodically refresh allowed host IPs
-	if(arr_count(m.allow_hostnames) > 0 && (time(NULL) - m.allow_host_last_refresh > m.allow_host_refresh)) {
-		refresh_allow_host_ips();
-	}
-	// Hostname allowlist check
-	if(arr_count(m.allow_host_ips) > 0) {
-		int host_found = -1;
-		arr_find(m.allow_host_ips, src_ip, &host_found);
-		if(host_found == -1) {
-			if(m.debug) {
-				printf("[DEBUG] Source IP not in resolved allow_host list: ");
-				print_ip(src_ip);
-				puts("");
-			}
-			return 0;
-		}
-	}
-					if(m.debug) {
-	FILE *fp = fopen(CONFIG_PREFIX"/wake-on-arp.conf", "r");
-	if(!fp) {
-		fprintf(stderr, "Could not open config file: "CONFIG_PREFIX"/wake-on-arp.conf\n");
-					}
-		// Still initialize arrays to avoid segfaults
-		arr_init(m.source_blacklist);
-		arr_init(m.target_list);
-				if(m.debug) {
-		arr_init(m.source_allowlist);
-		arr_init(m.source_denylist);
-		m.allow_any_source = false;
-		return 0; // Not an error, just skip config loading
-	}
-
-				}
-	// init variables
-				if(m.debug) {
 	arr_init(m.source_blacklist);
 	arr_init(m.target_list);
 
