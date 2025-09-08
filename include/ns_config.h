@@ -54,22 +54,21 @@
 // DNS cache refresh interval in seconds
 #define DEFAULT_DNS_CACHE_REFRESH_INTERVAL  300
 
-// Maximum number of entries in allow/exclude lists (reduced for ARM safety)
-#define MAX_SOURCE_LIST_ENTRIES 16
+// Maximum number of entries in allow/exclude lists
+#define MAX_SOURCE_LIST_ENTRIES 64
 
-// Structure for a source entry (IP or hostname) - aligned for ARM
+// Structure for a source entry (IP or hostname)
 typedef struct {
 	char *entry; // IP string or hostname
 	uint32_t ip; // resolved IP (if available)
 	bool is_hostname;
-	char _padding[3]; // Explicit padding for ARM alignment
-} __attribute__((aligned(4))) source_entry_t;
+} source_entry_t;
 
-// DNS cache for hostnames in allow/exclude lists - aligned for ARM
+// DNS cache for hostnames in allow/exclude lists
 typedef struct {
 	source_entry_t entries[MAX_SOURCE_LIST_ENTRIES];
 	size_t count;
 	time_t last_refresh;
-} __attribute__((aligned(8))) dns_cache_t;
+} dns_cache_t;
 
 #endif /* NS_CONFIG_H_ */

@@ -624,8 +624,7 @@ int load_config() {
 	}
 	if(line) free(line);
 
-	// weird seg. fault on ARMv7 (have to investigate)
-	//fclose(fp);
+	fclose(fp);
 	return 0;
 }
 
