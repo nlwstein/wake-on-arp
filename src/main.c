@@ -237,14 +237,42 @@ int initialize() {
 	print_ip(eth_ip&m.subnet);
 	printf(" - ");
 	print_ip(eth_ip|~m.subnet);
+	
+	// Show allowlist information
+	if(arr_count(m.source_allowlist) != 0) {
+		printf("\nAllowlist (only these sources will trigger wake-up):");
+		for(size_t i = 0; i < m.include_dns_cache.count; i++) {
+			if(m.include_dns_cache.entries[i].entry) {
+				printf(" %s", m.include_dns_cache.entries[i].entry);
+				if(m.include_dns_cache.entries[i].ip != 0) {
+					printf("(");
+					print_ip(m.include_dns_cache.entries[i].ip);
+					printf(")");
+				}
+			}
+		}
+	}
+	
+	// Show blocklist information  
 	if(arr_count(m.source_blacklist) != 0) {
-		printf(" but ignore the following IP(s):");
-
-		for(size_t i = 0; i < arr_count(m.source_blacklist); i++) {
+		printf("\nBlocklist (these sources will be ignored):");
+		for(size_t i = 0; i < m.exclude_dns_cache.count; i++) {
+			if(m.exclude_dns_cache.entries[i].entry) {
+				printf(" %s", m.exclude_dns_cache.entries[i].entry);
+				if(m.exclude_dns_cache.entries[i].ip != 0) {
+					printf("(");
+					print_ip(m.exclude_dns_cache.entries[i].ip);
+					printf(")");
+				}
+			}
+		}
+		// Also show any IPs added directly (like gateway)
+		for(size_t i = m.exclude_dns_cache.count; i < arr_count(m.source_blacklist); i++) {
 			printf(" ");
 			print_ip(m.source_blacklist[i]);
 		}
 	}
+	
 	puts("");
 	fflush(stdout); //to see this message in systemctl status
 
