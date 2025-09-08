@@ -604,20 +604,24 @@ int load_config() {
 			target_ip_add(m.target_list, number, val);
 		} else if(!strcmp("source_exclude", name)) {
 			// Accept either IP or hostname
-			arr_add(m.source_blacklist, 0); // Placeholder, will resolve later
 			if (m.exclude_dns_cache.count < MAX_SOURCE_LIST_ENTRIES) {
+				arr_add(m.source_blacklist, 0); // Placeholder, will resolve later
 				m.exclude_dns_cache.entries[m.exclude_dns_cache.count].entry = strdup(val);
 				m.exclude_dns_cache.entries[m.exclude_dns_cache.count].is_hostname = (strchr(val, '.') == NULL || strspn(val, "0123456789.") != strlen(val));
 				m.exclude_dns_cache.count++;
+			} else {
+				fprintf(stderr, "Warning: Maximum exclude list entries (%d) exceeded, ignoring '%s'\n", MAX_SOURCE_LIST_ENTRIES, val);
 			}
 			free(val);
 		} else if(!strcmp("source_include", name)) {
 			// Accept either IP or hostname
-			arr_add(m.source_allowlist, 0); // Placeholder, will resolve later
 			if (m.include_dns_cache.count < MAX_SOURCE_LIST_ENTRIES) {
+				arr_add(m.source_allowlist, 0); // Placeholder, will resolve later
 				m.include_dns_cache.entries[m.include_dns_cache.count].entry = strdup(val);
 				m.include_dns_cache.entries[m.include_dns_cache.count].is_hostname = (strchr(val, '.') == NULL || strspn(val, "0123456789.") != strlen(val));
 				m.include_dns_cache.count++;
+			} else {
+				fprintf(stderr, "Warning: Maximum include list entries (%d) exceeded, ignoring '%s'\n", MAX_SOURCE_LIST_ENTRIES, val);
 			}
 			free(val);
 		} else free(val); // not used
