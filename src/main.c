@@ -50,7 +50,10 @@ const char *USAGE_INFO = \
 "\t-d - network device to check traffic from (eg. eth0)\n"
 "\t-b - broadcast IP address (eg. 192.168.1.255)\n"
 "\t-s - subnet IP mask (eg. 24)\n"
-"\t-ag - send magic packet even if the ARP came from the router/gateway (disabled by default). "
+"\t-ag - send magic packet even if the ARP came from the router/gateway (disabled by default).\n"
+"\t--allow-any-source - allow ARP requests from any source IP (default: false)\n"
+"\t--allow-source <ip> - allow ARP requests only from this source IP (can be specified multiple times)\n"
+"\t--deny-source <ip> - deny ARP requests from this source IP (can be specified multiple times)\n"
 "For further info look here: https://github.com/nikp123/wake-on-arp/issues/1#issuecomment-882708765\n";
 
 void cleanup();
@@ -73,6 +76,9 @@ struct main {
 	struct target *target_list;
 
 	uint32_t *source_blacklist;
+	uint32_t *source_allowlist;
+	uint32_t *source_denylist;
+	bool allow_any_source;
 
 	unsigned char eth_ip[4];
 	unsigned char gate_ip[4];
@@ -231,17 +237,36 @@ int parse_arp(unsigned char *data) {
 	       print_ip(ta_ip);
 	       puts("'");
 	       fflush(stdout);
-	       // if source matches to host
-	       // and if target matches send magic
-	       unsigned int eth_ip = *((unsigned int*)&m.eth_ip);
 
-	       if((eth_ip&m.subnet) == (src_ip&m.subnet)) {
-		       for(size_t i = 0; i < arr_count(m.target_list); i++) {
-			       struct target *link = &m.target_list[i];
+	       for(size_t i = 0; i < arr_count(m.target_list); i++) {
+		       struct target *link = &m.target_list[i];
+		       if(*(unsigned int*)link->ip != ta_ip)
+			       continue;
 
-			       if(*(unsigned int*)link->ip != ta_ip)
-				       continue;
+		       // Denylist check
+		       int deny_found = -1;
+		       arr_find(m.source_denylist, src_ip, &deny_found);
+		       if(deny_found > -1) {
+			       printf("[DEBUG] Source IP denied: ");
+			       print_ip(src_ip);
+			       puts("");
+			       break;
+		       }
 
+		       // Allowlist check
+		       if(arr_count(m.source_allowlist) > 0) {
+			       int allow_found = -1;
+			       arr_find(m.source_allowlist, src_ip, &allow_found);
+			       if(allow_found == -1) {
+				       printf("[DEBUG] Source IP not in allowlist: ");
+				       print_ip(src_ip);
+				       puts("");
+				       break;
+			       }
+		       }
+
+		       // allow_any_source overrides subnet/blacklist logic
+		       if(m.allow_any_source || ( ((*((unsigned int*)&m.eth_ip))&m.subnet) == (src_ip&m.subnet) )) {
 			       int blacklist_found = -1;
 			       arr_find(m.source_blacklist, src_ip, &blacklist_found);
 			       if(blacklist_found > -1) {
@@ -252,17 +277,22 @@ int parse_arp(unsigned char *data) {
 				       #endif
 				       break;
 			       }
-
-			       // If the host is unreachable, log the ARP request
-			       // (i.e., do not send magic packet, just log)
+			       RETONFAIL(send_magic_packet(link->magic));
+			       printf("Magic packet to '");
+			       print_ip(ta_ip);
+			       printf("' sent by '");
+			       print_ip(src_ip);
+			       puts("'");
+			       fflush(stdout);
+		       } else {
 			       printf("[DEBUG] ARP request for target IP '");
 			       print_ip(ta_ip);
 			       printf("' from source IP '");
 			       print_ip(src_ip);
 			       puts("' (host unreachable, no magic packet sent)");
 			       fflush(stdout);
-			       break;
 		       }
+		       break;
 	       }
        }
 	return 0;
@@ -282,6 +312,39 @@ int parse_ethhdr(unsigned char* buffer) {
 }
 
 int read_args(int argc, char *argv[]) {
+	arr_init(m.source_allowlist);
+	arr_init(m.source_denylist);
+	m.allow_any_source = false;
+       // Parse allow/deny/any-source options
+       for(int i=1; i<argc; i++) {
+	       if(!strcmp(argv[i], "--allow-any-source")) {
+		       m.allow_any_source = true;
+	       } else if(!strcmp(argv[i], "--allow-source")) {
+		       FAILONARGS(i, argc);
+		       uint8_t address[4];
+		       int err = sscanf(argv[i+1], "%hhu.%hhu.%hhu.%hhu",
+			       &address[0], &address[1], &address[2], &address[3]);
+		       if(err != 4) {
+			       fprintf(stderr, "Invalid IP address for --allow-source: %s\n", argv[i+1]);
+			       return -1;
+		       }
+		       uint32_t address_ptr = *((uint32_t*)&address);
+		       arr_add(m.source_allowlist, address_ptr);
+		       i++;
+	       } else if(!strcmp(argv[i], "--deny-source")) {
+		       FAILONARGS(i, argc);
+		       uint8_t address[4];
+		       int err = sscanf(argv[i+1], "%hhu.%hhu.%hhu.%hhu",
+			       &address[0], &address[1], &address[2], &address[3]);
+		       if(err != 4) {
+			       fprintf(stderr, "Invalid IP address for --deny-source: %s\n", argv[i+1]);
+			       return -1;
+		       }
+		       uint32_t address_ptr = *((uint32_t*)&address);
+		       arr_add(m.source_denylist, address_ptr);
+		       i++;
+	       }
+       }
 	for(int i=1; i<argc; i++) {
 		if(!strcmp(argv[i], "-h")||!strcmp(argv[i], "--help")) {
 			puts(USAGE_INFO);
@@ -424,6 +487,9 @@ int load_config() {
 		// Still initialize arrays to avoid segfaults
 		arr_init(m.source_blacklist);
 		arr_init(m.target_list);
+		arr_init(m.source_allowlist);
+		arr_init(m.source_denylist);
+		m.allow_any_source = false;
 		return 0; // Not an error, just skip config loading
 	}
 
@@ -438,7 +504,31 @@ int load_config() {
 		int error = sscanf(line, "%ms %ms", &name, &val);
 		if(error != 2) continue;
 
-		if(!strcmp("broadcast_ip", name)) {
+			   if(!strcmp("broadcast_ip", name)) {
+	       } else if(!strcmp("allow_any_source", name)) {
+		       m.allow_any_source = (strcmp(val, "true") == 0 || strcmp(val, "1") == 0);
+	       } else if(!strcmp("source_allow", name)) {
+		       uint8_t address[4];
+		       int err = sscanf(val, "%hhu.%hhu.%hhu.%hhu",
+			       &address[0], &address[1], &address[2], &address[3]);
+		       if(err != 4) {
+			       fprintf(stderr, "Invalid IP address specified for allowlist \"%s\"\n", val);
+			       return 2;
+		       }
+		       uint32_t address_ptr = *((uint32_t*)&address);
+		       arr_add(m.source_allowlist, address_ptr);
+		       free(val);
+	       } else if(!strcmp("source_deny", name)) {
+		       uint8_t address[4];
+		       int err = sscanf(val, "%hhu.%hhu.%hhu.%hhu",
+			       &address[0], &address[1], &address[2], &address[3]);
+		       if(err != 4) {
+			       fprintf(stderr, "Invalid IP address specified for denylist \"%s\"\n", val);
+			       return 2;
+		       }
+		       uint32_t address_ptr = *((uint32_t*)&address);
+		       arr_add(m.source_denylist, address_ptr);
+		       free(val);
 			m.broadcast_ip_s = val;
 		} else if(!strcmp("net_device", name)) {
 			m.eth_dev_s = val;
