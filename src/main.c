@@ -80,21 +80,6 @@ int resolve_hostname(const char *hostname, uint32_t *out_ip) {
 }
 
 // Non-blocking DNS cache refresh (only refresh if really needed and been a while)
-void refresh_dns_cache_if_needed_nonblocking(dns_cache_t *cache) {
-	if (!cache) return;
-	
-	static time_t last_any_refresh = 0;
-	time_t now = time(NULL);
-	
-	// Only refresh if it's been at least the full interval since ANY refresh
-	if (last_any_refresh != 0 && (now - last_any_refresh) < DEFAULT_DNS_CACHE_REFRESH_INTERVAL) {
-		return; // Not time yet, skip to avoid blocking
-	}
-	
-	// Do the refresh (this might take time but only happens every 5 minutes)
-	refresh_dns_cache_if_needed(cache);
-	last_any_refresh = now;
-}
 void refresh_dns_cache_if_needed(dns_cache_t *cache) {
 	if (!cache) return;
 	
@@ -136,6 +121,23 @@ void refresh_dns_cache_if_needed(dns_cache_t *cache) {
 		}
 		cache->last_refresh = now;
 	}
+}
+
+// Non-blocking DNS cache refresh (only refresh if really needed and been a while)
+void refresh_dns_cache_if_needed_nonblocking(dns_cache_t *cache) {
+	if (!cache) return;
+	
+	static time_t last_any_refresh = 0;
+	time_t now = time(NULL);
+	
+	// Only refresh if it's been at least the full interval since ANY refresh
+	if (last_any_refresh != 0 && (now - last_any_refresh) < DEFAULT_DNS_CACHE_REFRESH_INTERVAL) {
+		return; // Not time yet, skip to avoid blocking
+	}
+	
+	// Do the refresh (this might take time but only happens every 5 minutes)
+	refresh_dns_cache_if_needed(cache);
+	last_any_refresh = now;
 }
 
 #ifndef CONFIG_PREFIX
