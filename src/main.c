@@ -454,7 +454,6 @@ int send_magic_packet(unsigned char *magic_packet) {
 
 	return 0;
 }
-		if(m.debug) {
 
 int get_local_ip() {
 	int fd;
