@@ -54,6 +54,7 @@ const char *USAGE_INFO = \
 "\t--allow-any-source - allow ARP requests from any source IP (default: false)\n"
 "\t--allow-source <ip> - allow ARP requests only from this source IP (can be specified multiple times)\n"
 "\t--deny-source <ip> - deny ARP requests from this source IP (can be specified multiple times)\n"
+"\t--debug - enable debug logging\n"
 "For further info look here: https://github.com/nikp123/wake-on-arp/issues/1#issuecomment-882708765\n";
 
 void cleanup();
@@ -67,6 +68,7 @@ int get_local_ip();
 int send_magic_packet(unsigned char*);
 
 struct main {
+	bool debug;
 	char *eth_dev_s;
 	char *eth_ip_s;
 	char *broadcast_ip_s;
@@ -312,6 +314,12 @@ int parse_ethhdr(unsigned char* buffer) {
 }
 
 int read_args(int argc, char *argv[]) {
+       m.debug = false;
+       for(int i=1; i<argc; i++) {
+	       if(!strcmp(argv[i], "--debug")) {
+		       m.debug = true;
+	       }
+       }
 	arr_init(m.source_allowlist);
 	arr_init(m.source_denylist);
 	m.allow_any_source = false;
@@ -442,12 +450,14 @@ int send_magic_packet(unsigned char *magic_packet) {
 
 	return 0;
 }
+		if(m.debug) {
 
 int get_local_ip() {
 	int fd;
 	struct ifreq ifr;
 
 	// open socket
+		}
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
 
 	if(fd < 0) {
@@ -458,9 +468,11 @@ int get_local_ip() {
 	// get a IPv4 address specifically
 	ifr.ifr_addr.sa_family = AF_INET;
 
+				if(m.debug) {
 	// get address for the following network device
 	strncpy(ifr.ifr_name, m.eth_dev_s, IFNAMSIZ-1);
 
+				}
 	// go fetch
 	int error = ioctl(fd, SIOCGIFADDR, &ifr);
 	if(error == -1) {
@@ -469,9 +481,11 @@ int get_local_ip() {
 	}
 
 	// clean up
+					if(m.debug) {
 	close(fd);
 
 	// get the darn address
+					}
 	m.eth_ip_s = inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
 
 	// convert IP back to binary
@@ -481,25 +495,31 @@ int get_local_ip() {
 }
 
 int load_config() {
+					if(m.debug) {
 	FILE *fp = fopen(CONFIG_PREFIX"/wake-on-arp.conf", "r");
 	if(!fp) {
 		fprintf(stderr, "Could not open config file: "CONFIG_PREFIX"/wake-on-arp.conf\n");
+					}
 		// Still initialize arrays to avoid segfaults
 		arr_init(m.source_blacklist);
 		arr_init(m.target_list);
+				if(m.debug) {
 		arr_init(m.source_allowlist);
 		arr_init(m.source_denylist);
 		m.allow_any_source = false;
 		return 0; // Not an error, just skip config loading
 	}
 
+				}
 	// init variables
+				if(m.debug) {
 	arr_init(m.source_blacklist);
 	arr_init(m.target_list);
 
 	char *line = NULL;
 	size_t len;
 	while(getline(&line, &len, fp) != -1) {
+				}
 		char *name, *val;
 		int error = sscanf(line, "%ms %ms", &name, &val);
 		if(error != 2) continue;
