@@ -1,3 +1,6 @@
+#include <stdint.h>
+#include "ns_config.h"
+#include <unistd.h>
 #include <pthread.h>
 #include <time.h>
 // Utility: resolve hostname to IPv4 address (returns 0 on success)
