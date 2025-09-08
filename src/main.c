@@ -1,8 +1,59 @@
 #include <stdint.h>
-#include "ns_config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
-#include <pthread.h>
+#include <stdbool.h>
 #include <time.h>
+#include <pthread.h>
+#include <errno.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/if_ether.h>
+#include <net/ethernet.h>
+#include <net/if.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <signal.h>
+#include <byteswap.h>
+
+#include "ns_config.h"
+#include "ns_arp.h"
+#include "ns_arp_packet.h"
+#include "array.h"
+#include "functions.h"
+
+// Main program state
+struct main {
+    char *eth_dev_s;
+    char *eth_ip_s;
+    char *broadcast_ip_s;
+    char *subnet_s;
+    char *allow_gateway_s;
+
+    struct target *target_list;
+
+    uint32_t *source_blacklist;
+    uint32_t *source_allowlist;
+
+    // DNS cache for hostnames in allow/exclude lists
+    dns_cache_t exclude_dns_cache;
+    dns_cache_t include_dns_cache;
+    int dns_cache_refresh_interval;
+
+    unsigned char eth_ip[4];
+    unsigned char gate_ip[4];
+
+    unsigned int  subnet;
+
+    unsigned char *buffer;
+    int sock_raw;
+    bool alive;
+} m;
 // Utility: resolve hostname to IPv4 address (returns 0 on success)
 int resolve_hostname(const char *hostname, uint32_t *out_ip) {
 	struct addrinfo hints, *res = NULL;
@@ -47,32 +98,6 @@ void *dns_cache_refresh_thread(void *arg) {
 	}
 	return NULL;
 }
-#include <errno.h>
-#include <netdb.h>
-#include <stdio.h>		// for standard things
-#include <stdlib.h>		// malloc
-#include <string.h>		// strlen
-#include <stdbool.h>
-
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>				// provides declarations for ip header
-#include <netinet/if_ether.h>		// for ETH_P_ALL
-#include <net/ethernet.h>			// for ether_header
-#include <net/if.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <signal.h>
-#include <byteswap.h>
-
-#include "ns_arp.h"
-#include "ns_arp_packet.h"
-
-#include "array.h"
-#include "functions.h"
 
 #ifndef CONFIG_PREFIX
 	#error "Please specify CONFIG_PREFIX (usually /etc on Linux)"
@@ -111,33 +136,6 @@ int parse_arp(unsigned char *);
 int parse_ethhdr(unsigned char*);
 int get_local_ip();
 int send_magic_packet(unsigned char*);
-
-struct main {
-	char *eth_dev_s;
-	char *eth_ip_s;
-	char *broadcast_ip_s;
-	char *subnet_s;
-	char *allow_gateway_s;
-
-	struct target *target_list;
-
-	uint32_t *source_blacklist;
-	uint32_t *source_allowlist;
-
-	// DNS cache for hostnames in allow/exclude lists
-	dns_cache_t exclude_dns_cache;
-	dns_cache_t include_dns_cache;
-	int dns_cache_refresh_interval;
-
-	unsigned char eth_ip[4];
-	unsigned char gate_ip[4];
-
-	unsigned int  subnet;
-
-	unsigned char *buffer;
-	int sock_raw;
-	bool alive;
-} m;
 
 void cleanup() {
 	arr_free(m.source_blacklist);
