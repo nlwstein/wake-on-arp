@@ -23,6 +23,29 @@ jobs:
           name: wake-on-arp-linux-armv7
           path: wake-on-arp-linux-armv7
 
+  build-armv7-raspbian-bullseye:
+    name: Build Linux ARMv7 (Raspbian Bullseye)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build in Bullseye Docker
+        uses: addnab/docker-run-action@v3
+        with:
+          image: debian:bullseye
+          options: -v ${{ github.workspace }}:/workspace
+          run: |
+            apt-get update
+            apt-get install -y build-essential gcc-arm-linux-gnueabihf make
+            cd /workspace
+            make clean
+            make wake-on-arp CC=arm-linux-gnueabihf-gcc
+            mv wake-on-arp wake-on-arp-linux-armv7-raspbian-bullseye
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wake-on-arp-linux-armv7-raspbian-bullseye
+          path: wake-on-arp-linux-armv7-raspbian-bullseye
+
   build-x64:
     name: Build Linux x64
     runs-on: ubuntu-latest
@@ -56,7 +79,7 @@ jobs:
           path: wake-on-arp-linux-arm64
 
   release:
-    needs: [build-x64, build-arm64, build-armv7]
+    needs: [build-x64, build-arm64, build-armv7, build-armv7-raspbian-bullseye]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
