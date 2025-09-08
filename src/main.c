@@ -215,45 +215,46 @@ int parse_arp(unsigned char *data) {
 	// ARP type
 	uint16_t type = ntohs(arp_IPv4->ns_arp_hdr.ns_arp_opcode);
 
-	if(type == NS_ARP_REQUEST) {
-		// if source matches to host
-		// and if target matches send magic
-		unsigned int eth_ip = *((unsigned int*)&m.eth_ip);
+       if(type == NS_ARP_REQUEST) {
+	       // if source matches to host
+	       // and if target matches send magic
+	       unsigned int eth_ip = *((unsigned int*)&m.eth_ip);
 
-		// sender and target address
-		unsigned int src_ip, ta_ip;
-		memcpy(&src_ip, arp_IPv4->ns_arp_sender_proto_addr, sizeof(unsigned int));
-		memcpy(&ta_ip, arp_IPv4->ns_arp_target_proto_addr, sizeof(unsigned int));
+	       // sender and target address
+	       unsigned int src_ip, ta_ip;
+	       memcpy(&src_ip, arp_IPv4->ns_arp_sender_proto_addr, sizeof(unsigned int));
+	       memcpy(&ta_ip, arp_IPv4->ns_arp_target_proto_addr, sizeof(unsigned int));
 
-		if((eth_ip&m.subnet) == (src_ip&m.subnet)) {
-			for(size_t i = 0; i < arr_count(m.target_list); i++) {
-				struct target *link = &m.target_list[i];
+	       if((eth_ip&m.subnet) == (src_ip&m.subnet)) {
+		       for(size_t i = 0; i < arr_count(m.target_list); i++) {
+			       struct target *link = &m.target_list[i];
 
-				if(*(unsigned int*)link->ip != ta_ip)
-					continue;
+			       if(*(unsigned int*)link->ip != ta_ip)
+				       continue;
 
-				int blacklist_found = -1;
-				arr_find(m.source_blacklist, src_ip, &blacklist_found);
-				if(blacklist_found > -1) {
-					#ifdef DEBUG
-					printf("Blocked '");
-					print_ip(src_ip);
-					puts("' from the blacklist!");
-					#endif
-					break;
-				}
+			       int blacklist_found = -1;
+			       arr_find(m.source_blacklist, src_ip, &blacklist_found);
+			       if(blacklist_found > -1) {
+				       #ifdef DEBUG
+				       printf("Blocked '");
+				       print_ip(src_ip);
+				       puts("' from the blacklist!");
+				       #endif
+				       break;
+			       }
 
-				RETONFAIL(send_magic_packet(link->magic));
-				printf("Magic packet to '");
-				print_ip(ta_ip);
-				printf("' sent by '");
-				print_ip(src_ip);
-				puts("'");
-				fflush(stdout); // Write now to get an accurate timestamp for analyzing wake-up reason
-				break;
-			}
-		}
-	}
+			       // If the host is unreachable, log the ARP request
+			       // (i.e., do not send magic packet, just log)
+			       printf("[DEBUG] ARP request for target IP '");
+			       print_ip(ta_ip);
+			       printf("' from source IP '");
+			       print_ip(src_ip);
+			       puts("' (host unreachable, no magic packet sent)");
+			       fflush(stdout);
+			       break;
+		       }
+	       }
+       }
 	return 0;
 }
 
