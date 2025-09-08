@@ -5,7 +5,7 @@ PREFIX ?= /usr/local
 CONFIG_PREFIX ?= /etc
 
 CFLAGS = -I./include -DCONFIG_PREFIX=\"$(CONFIG_PREFIX)\"
-LDFLAGS = -O2
+LDFLAGS = -O2 -lpthread
 
 all: wake-on-arp
 
