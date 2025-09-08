@@ -157,6 +157,10 @@ void cleanup() {
 		arr_free(m.source_blacklist);
 		m.source_blacklist = NULL;
 	}
+	if (m.source_allowlist) {
+		arr_free(m.source_allowlist);
+		m.source_allowlist = NULL;
+	}
 	if (m.target_list) {
 		targets_destroy(m.target_list);
 		m.target_list = NULL;
