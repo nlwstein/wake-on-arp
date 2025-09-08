@@ -1,0 +1,71 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  build-linux:
+    name: Build Linux Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            cc: gcc
+            exe: wake-on-arp-linux-x64
+          - arch: aarch64
+            cc: aarch64-linux-gnu-gcc
+            exe: wake-on-arp-linux-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cross compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Build
+        run: |
+          make clean
+          make wake-on-arp CC=${{ matrix.cc }}
+          mv wake-on-arp ${{ matrix.exe }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.exe }}
+          path: ${{ matrix.exe }}
+
+  # Optionally, add macOS build (experimental, may require code tweaks)
+  # build-macos:
+  #   runs-on: macos-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Build
+  #       run: |
+  #         make clean
+  #         make wake-on-arp
+  #         mv wake-on-arp wake-on-arp-macos
+  #     - name: Upload artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: wake-on-arp-macos
+  #         path: wake-on-arp-macos
+
+  release:
+    needs: build-linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+      - name: Display artifacts
+        run: ls -lR ./artifacts
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly-${{ github.sha }}
+          name: Nightly build ${{ github.sha }}
+          draft: false
+          prerelease: true
+          files: ./artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
