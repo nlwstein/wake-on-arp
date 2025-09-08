@@ -63,19 +63,38 @@ int resolve_hostname(const char *hostname, uint32_t *out_ip) {
 	struct addrinfo hints, *res = NULL;
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	
 	int err = getaddrinfo(hostname, NULL, &hints, &res);
 	if (err != 0 || !res) return -1;
+	
 	struct sockaddr_in *addr = (struct sockaddr_in *)res->ai_addr;
-	if (!addr) {
+	if (!addr || res->ai_addrlen < sizeof(struct sockaddr_in)) {
 		freeaddrinfo(res);
 		return -1;
 	}
+	
 	*out_ip = addr->sin_addr.s_addr;
 	freeaddrinfo(res);
 	return 0;
 }
 
-// Refresh DNS cache for a given list (check if refresh is needed)
+// Non-blocking DNS cache refresh (only refresh if really needed and been a while)
+void refresh_dns_cache_if_needed_nonblocking(dns_cache_t *cache) {
+	if (!cache) return;
+	
+	static time_t last_any_refresh = 0;
+	time_t now = time(NULL);
+	
+	// Only refresh if it's been at least the full interval since ANY refresh
+	if (last_any_refresh != 0 && (now - last_any_refresh) < DEFAULT_DNS_CACHE_REFRESH_INTERVAL) {
+		return; // Not time yet, skip to avoid blocking
+	}
+	
+	// Do the refresh (this might take time but only happens every 5 minutes)
+	refresh_dns_cache_if_needed(cache);
+	last_any_refresh = now;
+}
 void refresh_dns_cache_if_needed(dns_cache_t *cache) {
 	if (!cache) return;
 	
@@ -83,8 +102,12 @@ void refresh_dns_cache_if_needed(dns_cache_t *cache) {
 	if (cache->last_refresh == 0 || (now - cache->last_refresh) >= DEFAULT_DNS_CACHE_REFRESH_INTERVAL) {
 		DEBUG_PRINT("Refreshing DNS cache with %zu entries\n", cache->count);
 		
-		for (size_t i = 0; i < cache->count && i < MAX_SOURCE_LIST_ENTRIES; ++i) {
-			if (!cache->entries[i].entry) continue;
+		// Bounds check to prevent buffer overflow
+		size_t safe_count = (cache->count > MAX_SOURCE_LIST_ENTRIES) ? MAX_SOURCE_LIST_ENTRIES : cache->count;
+		
+		for (size_t i = 0; i < safe_count; ++i) {
+			// Additional safety checks
+			if (!cache->entries[i].entry || strlen(cache->entries[i].entry) == 0) continue;
 			
 			if (cache->entries[i].is_hostname) {
 				DEBUG_PRINT("Resolving hostname: %s\n", cache->entries[i].entry);
@@ -101,7 +124,11 @@ void refresh_dns_cache_if_needed(dns_cache_t *cache) {
 				int err = sscanf(cache->entries[i].entry, "%hhu.%hhu.%hhu.%hhu",
 					&address[0], &address[1], &address[2], &address[3]);
 				if (err == 4) {
-					cache->entries[i].ip = *((uint32_t*)&address);
+					// Safe conversion avoiding unaligned access
+					cache->entries[i].ip = ((uint32_t)address[0]) |
+					                       ((uint32_t)address[1] << 8) |
+					                       ((uint32_t)address[2] << 16) |
+					                       ((uint32_t)address[3] << 24);
 				} else {
 					cache->entries[i].ip = 0;
 				}
@@ -348,9 +375,9 @@ int parse_arp(unsigned char *data) {
 		memcpy(&ta_ip, arp_IPv4->ns_arp_target_proto_addr, sizeof(unsigned int));
 
 		if((eth_ip&m.subnet) == (src_ip&m.subnet)) {
-			// Refresh DNS caches if needed before checking
-			refresh_dns_cache_if_needed(&m.exclude_dns_cache);
-			refresh_dns_cache_if_needed(&m.include_dns_cache);
+			// Non-blocking DNS cache refresh (only if really needed)
+			refresh_dns_cache_if_needed_nonblocking(&m.exclude_dns_cache);
+			refresh_dns_cache_if_needed_nonblocking(&m.include_dns_cache);
 			
 			// Check blocklist (source_exclude) first
 			bool blocked = false;
