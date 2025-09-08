@@ -50,8 +50,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: nightly-${{ github.sha }}
-          name: Nightly build ${{ github.sha }}
+          tag_name: nightly-${{ github.run_id }}
+          name: Nightly build ${{ github.run_id }}
           draft: false
           prerelease: true
           files: ./artifacts/**/*
