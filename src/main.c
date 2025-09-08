@@ -26,6 +26,8 @@
 #include "array.h"
 #include "functions.h"
 
+#define DEBUG_PRINT(...) do { if (m.debug) printf(__VA_ARGS__); } while(0)
+
 // Main program state
 struct main {
     char *eth_dev_s;
@@ -52,6 +54,7 @@ struct main {
     unsigned char *buffer;
     int sock_raw;
     bool alive;
+    bool debug;
 } m;
 // Utility: resolve hostname to IPv4 address (returns 0 on success)
 int resolve_hostname(const char *hostname, uint32_t *out_ip) {
@@ -78,23 +81,17 @@ void refresh_dns_cache_if_needed(dns_cache_t *cache) {
 	
 	time_t now = time(NULL);
 	if (cache->last_refresh == 0 || (now - cache->last_refresh) >= DEFAULT_DNS_CACHE_REFRESH_INTERVAL) {
-		#ifdef DEBUG
-		printf("Refreshing DNS cache with %zu entries\n", cache->count);
-		#endif
+		DEBUG_PRINT("Refreshing DNS cache with %zu entries\n", cache->count);
 		
 		for (size_t i = 0; i < cache->count && i < MAX_SOURCE_LIST_ENTRIES; ++i) {
 			if (!cache->entries[i].entry) continue;
 			
 			if (cache->entries[i].is_hostname) {
-				#ifdef DEBUG
-				printf("Resolving hostname: %s\n", cache->entries[i].entry);
-				#endif
+				DEBUG_PRINT("Resolving hostname: %s\n", cache->entries[i].entry);
 				uint32_t resolved_ip;
 				if (resolve_hostname(cache->entries[i].entry, &resolved_ip) != 0) {
 					cache->entries[i].ip = 0; // Mark as unresolved
-					#ifdef DEBUG
-					printf("Failed to resolve: %s\n", cache->entries[i].entry);
-					#endif
+					DEBUG_PRINT("Failed to resolve: %s\n", cache->entries[i].entry);
 				} else {
 					cache->entries[i].ip = resolved_ip;
 				}
@@ -140,7 +137,8 @@ const char *USAGE_INFO = \
 "\t-b - broadcast IP address (eg. 192.168.1.255)\n"
 "\t-s - subnet IP mask (eg. 24)\n"
 "\t-ag - send magic packet even if the ARP came from the router/gateway (disabled by default). "
-"For further info look here: https://github.com/nikp123/wake-on-arp/issues/1#issuecomment-882708765\n";
+"For further info look here: https://github.com/nikp123/wake-on-arp/issues/1#issuecomment-882708765\n"
+"\t--debug - enable verbose debug output\n";
 
 void cleanup();
 void sig_handler();
@@ -153,9 +151,7 @@ int get_local_ip();
 int send_magic_packet(unsigned char*);
 
 void cleanup() {
-	#ifdef DEBUG
-	printf("Cleaning up resources\n");
-	#endif
+	DEBUG_PRINT("Cleaning up resources\n");
 	
 	if (m.source_blacklist) {
 		arr_free(m.source_blacklist);
@@ -333,11 +329,11 @@ int parse_arp(unsigned char *data) {
 				}
 			}
 			if (blocked) {
-				#ifdef DEBUG
-				printf("Blocked '");
-				print_ip(src_ip);
-				puts("' from the blacklist!");
-				#endif
+				if (m.debug) {
+					printf("Blocked '");
+					print_ip(src_ip);
+					puts("' from the blacklist!");
+				}
 				return 0;
 			}
 
@@ -352,11 +348,11 @@ int parse_arp(unsigned char *data) {
 				}
 			}
 			if (!allowed) {
-				#ifdef DEBUG
-				printf("Source '");
-				print_ip(src_ip);
-				puts("' not in allowlist!");
-				#endif
+				if (m.debug) {
+					printf("Source '");
+					print_ip(src_ip);
+					puts("' not in allowlist!");
+				}
 				return 0;
 			}
 
@@ -418,6 +414,8 @@ int read_args(int argc, char *argv[]) {
 			i++;
 		} else if(!strcmp(argv[i], "-ag")) {
 			m.allow_gateway_s = "true";
+		} else if(!strcmp(argv[i], "--debug")) {
+			m.debug = true;
 		}
 	}
 	return 0;
@@ -604,16 +602,12 @@ int load_config() {
 }
 
 int main(int argc, char *argv[]) {
-	#ifdef DEBUG
-	printf("Starting wake-on-arp with debug mode\n");
-	#endif
+	DEBUG_PRINT("Starting wake-on-arp with debug mode\n");
 	
 	// Initialize all fields to zero/NULL for safety
 	memset(&m, 0, sizeof(m));
 	
-	#ifdef DEBUG
-	printf("Initialized main struct\n");
-	#endif
+	DEBUG_PRINT("Initialized main struct\n");
 	
 	m.allow_gateway_s = NULL; // init config in case it won't be set
 	m.dns_cache_refresh_interval = DEFAULT_DNS_CACHE_REFRESH_INTERVAL;
@@ -622,48 +616,34 @@ int main(int argc, char *argv[]) {
 	m.exclude_dns_cache.last_refresh = 0;
 	m.include_dns_cache.last_refresh = 0;
 	
-	#ifdef DEBUG
-	printf("Starting config load\n");
-	#endif
+	DEBUG_PRINT("Starting config load\n");
 	
 	// priority: load_config < read_args
 	load_config();
 	
-	#ifdef DEBUG
-	printf("Config loaded, reading args\n");
-	#endif
+	DEBUG_PRINT("Config loaded, reading args\n");
 	
 	RETONFAIL(read_args(argc, argv));
 	
-	#ifdef DEBUG
-	printf("Args read, parsing\n");
-	#endif
+	DEBUG_PRINT("Args read, parsing\n");
 	
 	RETONFAIL(parse_args());
 	
-	#ifdef DEBUG
-	printf("Args parsed, refreshing DNS cache\n");
-	#endif
+	DEBUG_PRINT("Args parsed, refreshing DNS cache\n");
 	
 	// Initial DNS cache population
 	refresh_dns_cache_if_needed(&m.exclude_dns_cache);
 	refresh_dns_cache_if_needed(&m.include_dns_cache);
 	
-	#ifdef DEBUG
-	printf("DNS cache refreshed, initializing\n");
-	#endif
+	DEBUG_PRINT("DNS cache refreshed, initializing\n");
 	
 	RETONFAIL(initialize());
 	
-	#ifdef DEBUG
-	printf("Initialized, starting packet watch\n");
-	#endif
+	DEBUG_PRINT("Initialized, starting packet watch\n");
 	
 	RETONFAIL(watch_packets());
 	
-	#ifdef DEBUG
-	printf("Cleaning up\n");
-	#endif
+	DEBUG_PRINT("Cleaning up\n");
 	
 	cleanup();
 	return 0;

@@ -7,14 +7,14 @@ CONFIG_PREFIX ?= /etc
 CFLAGS = -I./include -DCONFIG_PREFIX=\"$(CONFIG_PREFIX)\"
 LDFLAGS = -O2
 
-debug-arm: CFLAGS += -g -DDEBUG -Wall -Wextra -fno-omit-frame-pointer
+debug-arm: CFLAGS += -g -Wall -Wextra -fno-omit-frame-pointer
 debug-arm: LDFLAGS = -g
 debug-arm: wake-on-arp
 
 all: wake-on-arp
 
 debug: LDFLAGS = -static-libasan
-debug: CFLAGS += -g -DDEBUG -Wall -Wextra -fsanitize=address,undefined,pointer-compare,pointer-subtract -fno-omit-frame-pointer
+debug: CFLAGS += -g -Wall -Wextra -fsanitize=address,undefined,pointer-compare,pointer-subtract -fno-omit-frame-pointer
 debug: wake-on-arp
 
 wake-on-arp: $(obj)
