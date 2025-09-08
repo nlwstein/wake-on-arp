@@ -216,6 +216,16 @@ int parse_arp(unsigned char *data) {
 	uint16_t type = ntohs(arp_IPv4->ns_arp_hdr.ns_arp_opcode);
 
        if(type == NS_ARP_REQUEST) {
+	       // Log every ARP request received
+	       unsigned int src_ip, ta_ip;
+	       memcpy(&src_ip, arp_IPv4->ns_arp_sender_proto_addr, sizeof(unsigned int));
+	       memcpy(&ta_ip, arp_IPv4->ns_arp_target_proto_addr, sizeof(unsigned int));
+	       printf("[DEBUG] ARP request: source IP '");
+	       print_ip(src_ip);
+	       printf("' target IP '");
+	       print_ip(ta_ip);
+	       puts("'");
+	       fflush(stdout);
 	       // if source matches to host
 	       // and if target matches send magic
 	       unsigned int eth_ip = *((unsigned int*)&m.eth_ip);
