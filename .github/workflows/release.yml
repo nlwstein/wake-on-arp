@@ -1,3 +1,20 @@
+  build-armv7:
+    name: Build Linux ARMv7 (32-bit)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cross compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-linux-gnueabihf
+      - name: Build
+        run: |
+          make clean
+          make wake-on-arp CC=arm-linux-gnueabihf-gcc
+          mv wake-on-arp wake-on-arp-linux-armv7
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wake-on-arp-linux-armv7
+          path: wake-on-arp-linux-armv7
 
 name: Build and Release
 
