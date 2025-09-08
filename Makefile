@@ -7,6 +7,10 @@ CONFIG_PREFIX ?= /etc
 CFLAGS = -I./include -DCONFIG_PREFIX=\"$(CONFIG_PREFIX)\"
 LDFLAGS = -O2
 
+debug-arm: CFLAGS += -g -DDEBUG -Wall -Wextra -fno-omit-frame-pointer
+debug-arm: LDFLAGS = -g
+debug-arm: wake-on-arp
+
 all: wake-on-arp
 
 debug: LDFLAGS = -static-libasan

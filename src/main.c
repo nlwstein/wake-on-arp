@@ -55,12 +55,18 @@ struct main {
 } m;
 // Utility: resolve hostname to IPv4 address (returns 0 on success)
 int resolve_hostname(const char *hostname, uint32_t *out_ip) {
+	if (!hostname || !out_ip) return -1;
+	
 	struct addrinfo hints, *res = NULL;
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET;
 	int err = getaddrinfo(hostname, NULL, &hints, &res);
 	if (err != 0 || !res) return -1;
 	struct sockaddr_in *addr = (struct sockaddr_in *)res->ai_addr;
+	if (!addr) {
+		freeaddrinfo(res);
+		return -1;
+	}
 	*out_ip = addr->sin_addr.s_addr;
 	freeaddrinfo(res);
 	return 0;
@@ -68,12 +74,26 @@ int resolve_hostname(const char *hostname, uint32_t *out_ip) {
 
 // Refresh DNS cache for a given list (check if refresh is needed)
 void refresh_dns_cache_if_needed(dns_cache_t *cache) {
+	if (!cache) return;
+	
 	time_t now = time(NULL);
 	if (cache->last_refresh == 0 || (now - cache->last_refresh) >= DEFAULT_DNS_CACHE_REFRESH_INTERVAL) {
-		for (size_t i = 0; i < cache->count; ++i) {
+		#ifdef DEBUG
+		printf("Refreshing DNS cache with %zu entries\n", cache->count);
+		#endif
+		
+		for (size_t i = 0; i < cache->count && i < MAX_SOURCE_LIST_ENTRIES; ++i) {
+			if (!cache->entries[i].entry) continue;
+			
 			if (cache->entries[i].is_hostname) {
+				#ifdef DEBUG
+				printf("Resolving hostname: %s\n", cache->entries[i].entry);
+				#endif
 				if (resolve_hostname(cache->entries[i].entry, &cache->entries[i].ip) != 0) {
 					cache->entries[i].ip = 0; // Mark as unresolved
+					#ifdef DEBUG
+					printf("Failed to resolve: %s\n", cache->entries[i].entry);
+					#endif
 				}
 			} else {
 				// Parse as IPv4 string
@@ -130,10 +150,40 @@ int get_local_ip();
 int send_magic_packet(unsigned char*);
 
 void cleanup() {
-	arr_free(m.source_blacklist);
-	targets_destroy(m.target_list);
-	close(m.sock_raw);
-	free(m.buffer);
+	#ifdef DEBUG
+	printf("Cleaning up resources\n");
+	#endif
+	
+	if (m.source_blacklist) {
+		arr_free(m.source_blacklist);
+		m.source_blacklist = NULL;
+	}
+	if (m.target_list) {
+		targets_destroy(m.target_list);
+		m.target_list = NULL;
+	}
+	if (m.sock_raw > 0) {
+		close(m.sock_raw);
+		m.sock_raw = 0;
+	}
+	if (m.buffer) {
+		free(m.buffer);
+		m.buffer = NULL;
+	}
+	
+	// Clean up DNS cache entries
+	for (size_t i = 0; i < m.exclude_dns_cache.count && i < MAX_SOURCE_LIST_ENTRIES; ++i) {
+		if (m.exclude_dns_cache.entries[i].entry) {
+			free(m.exclude_dns_cache.entries[i].entry);
+			m.exclude_dns_cache.entries[i].entry = NULL;
+		}
+	}
+	for (size_t i = 0; i < m.include_dns_cache.count && i < MAX_SOURCE_LIST_ENTRIES; ++i) {
+		if (m.include_dns_cache.entries[i].entry) {
+			free(m.include_dns_cache.entries[i].entry);
+			m.include_dns_cache.entries[i].entry = NULL;
+		}
+	}
 }
 
 // handle signals, such as CTRL-C
@@ -549,8 +599,16 @@ int load_config() {
 }
 
 int main(int argc, char *argv[]) {
+	#ifdef DEBUG
+	printf("Starting wake-on-arp with debug mode\n");
+	#endif
+	
 	// Initialize all fields to zero/NULL for safety
 	memset(&m, 0, sizeof(m));
+	
+	#ifdef DEBUG
+	printf("Initialized main struct\n");
+	#endif
 	
 	m.allow_gateway_s = NULL; // init config in case it won't be set
 	m.dns_cache_refresh_interval = DEFAULT_DNS_CACHE_REFRESH_INTERVAL;
@@ -559,17 +617,48 @@ int main(int argc, char *argv[]) {
 	m.exclude_dns_cache.last_refresh = 0;
 	m.include_dns_cache.last_refresh = 0;
 	
+	#ifdef DEBUG
+	printf("Starting config load\n");
+	#endif
+	
 	// priority: load_config < read_args
 	load_config();
+	
+	#ifdef DEBUG
+	printf("Config loaded, reading args\n");
+	#endif
+	
 	RETONFAIL(read_args(argc, argv));
+	
+	#ifdef DEBUG
+	printf("Args read, parsing\n");
+	#endif
+	
 	RETONFAIL(parse_args());
+	
+	#ifdef DEBUG
+	printf("Args parsed, refreshing DNS cache\n");
+	#endif
 	
 	// Initial DNS cache population
 	refresh_dns_cache_if_needed(&m.exclude_dns_cache);
 	refresh_dns_cache_if_needed(&m.include_dns_cache);
 	
+	#ifdef DEBUG
+	printf("DNS cache refreshed, initializing\n");
+	#endif
+	
 	RETONFAIL(initialize());
+	
+	#ifdef DEBUG
+	printf("Initialized, starting packet watch\n");
+	#endif
+	
 	RETONFAIL(watch_packets());
+	
+	#ifdef DEBUG
+	printf("Cleaning up\n");
+	#endif
 	
 	cleanup();
 	return 0;
