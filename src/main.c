@@ -410,7 +410,10 @@ int load_config() {
 	FILE *fp = fopen(CONFIG_PREFIX"/wake-on-arp.conf", "r");
 	if(!fp) {
 		fprintf(stderr, "Could not open config file: "CONFIG_PREFIX"/wake-on-arp.conf\n");
-		return 1;
+		// Still initialize arrays to avoid segfaults
+		arr_init(m.source_blacklist);
+		arr_init(m.target_list);
+		return 0; // Not an error, just skip config loading
 	}
 
 	// init variables
