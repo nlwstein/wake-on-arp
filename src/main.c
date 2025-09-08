@@ -235,11 +235,6 @@ int parse_arp(unsigned char *data) {
 	       // and if target matches send magic
 	       unsigned int eth_ip = *((unsigned int*)&m.eth_ip);
 
-	       // sender and target address
-	       unsigned int src_ip, ta_ip;
-	       memcpy(&src_ip, arp_IPv4->ns_arp_sender_proto_addr, sizeof(unsigned int));
-	       memcpy(&ta_ip, arp_IPv4->ns_arp_target_proto_addr, sizeof(unsigned int));
-
 	       if((eth_ip&m.subnet) == (src_ip&m.subnet)) {
 		       for(size_t i = 0; i < arr_count(m.target_list); i++) {
 			       struct target *link = &m.target_list[i];
