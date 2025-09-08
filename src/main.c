@@ -115,16 +115,21 @@ int initialize() {
 	// allocate memory for storing packets
 	m.buffer = (unsigned char *) malloc(65536);
 
-	// open the socket
-	m.sock_raw = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL)) ;
 
-	// listen on a specific network device
-	setsockopt(m.sock_raw, SOL_SOCKET, SO_BINDTODEVICE, m.eth_dev_s, strlen(m.eth_dev_s)+1);
+       // open the socket
+       m.sock_raw = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+       if(m.sock_raw < 0) {
+	       perror("socket error");
+	       return 1;
+       }
 
-	if(m.sock_raw < 0) {
-		perror("socket error");
-		return 1;
-	}
+       // listen on a specific network device
+       int bind_result = setsockopt(m.sock_raw, SOL_SOCKET, SO_BINDTODEVICE, m.eth_dev_s, strlen(m.eth_dev_s)+1);
+       if(bind_result < 0) {
+	       perror("setsockopt SO_BINDTODEVICE failed");
+	       close(m.sock_raw);
+	       return 1;
+       }
 
 	uint32_t eth_ip =     *((uint32_t*)&m.eth_ip);
 	uint32_t gateway_ip = *((uint32_t*)&m.gate_ip);
