@@ -63,7 +63,7 @@ typedef struct {
 	uint32_t ip; // resolved IP (if available)
 	bool is_hostname;
 	char _padding[3]; // Explicit padding for ARM alignment
-} __attribute__((packed)) source_entry_t;
+} __attribute__((aligned(4))) source_entry_t;
 
 // DNS cache for hostnames in allow/exclude lists - aligned for ARM
 typedef struct {

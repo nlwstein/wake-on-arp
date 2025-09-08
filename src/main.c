@@ -89,11 +89,14 @@ void refresh_dns_cache_if_needed(dns_cache_t *cache) {
 				#ifdef DEBUG
 				printf("Resolving hostname: %s\n", cache->entries[i].entry);
 				#endif
-				if (resolve_hostname(cache->entries[i].entry, &cache->entries[i].ip) != 0) {
+				uint32_t resolved_ip;
+				if (resolve_hostname(cache->entries[i].entry, &resolved_ip) != 0) {
 					cache->entries[i].ip = 0; // Mark as unresolved
 					#ifdef DEBUG
 					printf("Failed to resolve: %s\n", cache->entries[i].entry);
 					#endif
+				} else {
+					cache->entries[i].ip = resolved_ip;
 				}
 			} else {
 				// Parse as IPv4 string
